@@ -23,14 +23,29 @@ body {
 
 .bar1 {
   fill: steelblue;
+  transition: height 1s;
 }
 
 .bar2 {
   fill: orange;
+  transition: height 1s;
 }
 
 .x.axis path {
   display: none;
+}
+
+div.tooltip {
+    position: absolute;
+    text-align: center;
+    width: 60px;
+    height: 28px;
+    padding: 2px;
+    font: 12px sans-serif;
+    background: lightsteelblue;
+    border: 0px;
+    border-radius: 8px;
+    pointer-events: none;
 }
 
 </style>
@@ -45,17 +60,20 @@ var margin = {top: 80, right: 80, bottom: 80, left: 80},
 var x = d3.scale.ordinal()
     .rangeRoundBands([0, width], .1);
 
-var y0 = d3.scale.linear().domain([0, 200]).range([height, 0]),
-y1 = d3.scale.linear().domain([0, 200]).range([height, 0]);
+var y1 = d3.scale.linear().domain([0, 200]).range([height, 0]);
 
 var xAxis = d3.svg.axis()
     .scale(x)
     .orient("bottom");
 
 // create left yAxis
-var yAxisLeft = d3.svg.axis().scale(y0).ticks(4).orient("left");
 // create right yAxis
 var yAxisRight = d3.svg.axis().scale(y1).ticks(6).orient("right");
+
+// Define the div for the tooltip
+var div = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
 
 var svg = d3.select("body").append("svg")
     .attr("width", width + margin.left + margin.right)
@@ -63,18 +81,57 @@ var svg = d3.select("body").append("svg")
   .append("g")
     .attr("class", "graph")
     .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    svg.append("g")
+        .attr("class", "xaxis")
+        .attr("transform", "translate(0," + height + ")")
+        .call(xAxis)
+        .selectAll("text")
+      .attr("y", 0)
+      .attr("x", 9)
+      .attr("dy", ".35em")
+      .attr("transform", "rotate(90)")
+      .style("text-anchor", "start");
+
+    svg.append("g")
+  	  .attr("class", "y axis axisRight")
+  	  .attr("transform", "translate(" + (width) + ",0)")
+  	  .call(yAxisRight)
+  	.append("text")
+  	  .attr("y", 6)
+  	  .attr("dy", "-2em")
+  	  .attr("dx", "2em")
+  	  .style("text-anchor", "end")
+  	  .text("Quantidade");
+
 var gdata;
+var place = "bobs";
+var ini = 5, fi = 22;
 d3.csv("data/data.csv", function(error, data) {
   gdata = data;
-  render(data, "bobs");
+
+  x.domain(gdata.map(function(d) { return d.horario_inicial; }));
+
+  render(gdata, "bobs");
 });
 
-function render(data, place) {
-  x.domain(data.map(function(d) { return d.horario_inicial; }));
-  y0.domain([0, d3.max(data, function(d) { return Number(d.homens_pedestres); })]);
+function render(data) {
 
+  data = data.filter(function (d){
+    return d.local == place && Number(d.horario_inicial.split(":")[0]) >= ini && fi > Number(d.horario_inicial.split(":")[0]);
+  })
+
+  svg.selectAll("rect").remove();
+  svg.selectAll(".xaxis").remove();
+  svg.selectAll(".xaxis").selectAll("path").remove();
+  var x = d3.scale.ordinal()
+      .rangeRoundBands([0, width], .1);
+  var xAxis = d3.svg.axis()
+      .scale(x)
+      .orient("bottom");
+  x.domain(data.map(function(d) { return d.horario_inicial; }));
   svg.append("g")
-      .attr("class", "x axis")
+      .attr("class", "xaxis")
       .attr("transform", "translate(0," + height + ")")
       .call(xAxis)
       .selectAll("text")
@@ -84,63 +141,113 @@ function render(data, place) {
     .attr("transform", "rotate(90)")
     .style("text-anchor", "start");
 
-  svg.append("g")
-	  .attr("class", "y axis axisLeft")
-	  .attr("transform", "translate(0,0)")
-	  .call(yAxisLeft)
-	.append("text")
-	  .attr("y", 6)
-	  .attr("dy", "-2em")
-	  .style("text-anchor", "end")
-	  .style("text-anchor", "end")
-	  .text("Quantidade de homens");
-
-  svg.append("g")
-	  .attr("class", "y axis axisRight")
-	  .attr("transform", "translate(" + (width) + ",0)")
-	  .call(yAxisRight)
-	.append("text")
-	  .attr("y", 6)
-	  .attr("dy", "-2em")
-	  .attr("dx", "2em")
-	  .style("text-anchor", "end")
-	  .text("Quantidade de mulheres");
-
   bars = svg.selectAll(".bar").data(data.filter(function (d){
-    return d.local == place;
-  })).enter();
-
-  bars.append("rect")
+    return d.local == place && Number(d.horario_inicial.split(":")[0]) >= ini && fi > Number(d.horario_inicial.split(":")[0]);
+  }));
+/*
+  x.domain(function(d) {
+    data.map(function(d) { return d.horario_inicial; })
+  });
+*/
+  bars.enter().append("rect")
       .attr("class", "bar1")
       .attr("x", function(d) { return x(d.horario_inicial); })
       .attr("width", x.rangeBand()/2)
-      .attr("y", function(d) { return y0(Number(d.homens_pedestres)); })
-	  .attr("height", function(d,i,j) { return height - y0(Number(d.homens_pedestres)); })
-    .style("transition", "height 2s");
+      .on("mouseover", function(d) {
+        div.transition()
+            .duration(200)
+            .style("opacity", .9);
+        div	.html(d.homens_pedestres + " homens")
+            .style("left", (d3.event.pageX) + "px")
+            .style("top", (d3.event.pageY - 28) + "px");
+        })
+        .on("mouseout", function(d) {
+            div.transition()
+                .duration(500)
+                .style("opacity", 0);
+        })
 
-  bars.append("rect")
+    .transition()
+            .duration(1000)
+            .ease("linear")
+            .attr("y", function(d) { return y1(Number(d.homens_pedestres)); })
+      	  .attr("height", function(d,i,j) { return height - y1(Number(d.homens_pedestres)); })
+
+  bars.enter().append("rect")
       .attr("class", "bar2")
       .attr("x", function(d) { return x(d.horario_inicial) + x.rangeBand()/2; })
       .attr("width", x.rangeBand() / 2)
-      .attr("y", function(d) { return y1(Number(d.mulheres_pedestres)); })
-	  .attr("height", function(d,i,j) { return height - y1(Number(d.mulheres_pedestres)); })
-    .style("transition", "height 2s");
-
-    d3.transition().selectAll('.rect')
-      .attr('width', function(d) { return rect(d.values); });
+      .on("mouseover", function(d) {
+        div.transition()
+            .duration(200)
+            .style("opacity", .9);
+        div	.html(d.mulheres_pedestres + " mulheres")
+            .style("left", (d3.event.pageX) + "px")
+            .style("top", (d3.event.pageY - 28) + "px");
+        })
+        .on("mouseout", function(d) {
+            div.transition()
+                .duration(500)
+                .style("opacity", 0);
+        })
+    .transition()
+                .duration(1000)
+                .ease("linear")
+                .attr("y", function(d) { return y1(Number(d.mulheres_pedestres)); })
+          	  .attr("height", function(d,i,j) { return height - y1(Number(d.mulheres_pedestres)); })
 
 }
 
-function t(place) {
-  render(gdata, place)
+function update(lplace) {
+  place = lplace;
+  d3.csv("data/data.csv", function(error, data) {
+    data.filter(function(d) {
+      return d.local == place;
+    });
+    render(data)
+  });
+}
+
+function timeInterval(horario) {
+  if (horario == "manha") {
+    ini = 6;
+    fi = 12;
+  }
+  else if (horario == "tarde") {
+    ini = 12;
+    fi = 18;
+  }
+  else if (horario == "noite"){
+    ini = 18;
+    fi = 22;
+  } else {
+    ini = 6;
+    fi = 22;
+  }
+
+  d3.csv("data/data.csv", function(error, data) {
+    data.filter(function(d) {
+      return d.local == place && Number(d.horario_inicial.split(":")[0]) >= ini && fi > Number(d.horario_inicial.split(":")[0]);
+    });
+    render(data)
+  });
 }
 
 </script>
 
 <body>
 
-  <button onclick="t('burrinhos')">
-        Retail
-    </button>
+  <select onchange="update(this.value)">
+  <option value="bobs">Bobs</option>
+  <option value="burrinhos">Burrinhos</option>
+  <option value="jackson">Jackson</option>
+  </select>
+
+  <select onchange="timeInterval(this.value)">
+  <option value="todos">Todos os turnos</option>
+  <option value="manha">Manhã</option>
+  <option value="tarde">Tarde</option>
+  <option value="noite">Noite</option>
+  </select>
 
 </body>
